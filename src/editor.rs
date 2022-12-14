@@ -104,7 +104,7 @@ impl Editor<InitialState> {
     /// # }
     /// ```
     pub fn open(&self) -> Result<String, ScrawlError> {
-        let path = create_temp_file()?;
+        let path = create_temp_file(&self.unique.extension)?;
         open_editor(&self.editor, &path)
     }
 
@@ -141,8 +141,16 @@ impl EditorState for FileState {}
 impl Editor<FileState> {
     /// Open a buffer seeded with the contents of the file at the path provided.
     pub fn open(&self) -> Result<String, ScrawlError> {
+  
+        // Try to get original extension
+        let ext = match self.unique.path.extension() {
+            Some(ext) => ext.to_string_lossy(),
+            None => "".into(),
+        };
+
+        let temp_file_path = create_temp_file(&ext)?;
+
         /* Copy the contents of this file to the temp file */
-        let temp_file_path = create_temp_file()?;
         fs::copy(&self.unique.path, &temp_file_path).map_err(|_| {
             let path = self.unique.path.to_string_lossy().into();
             ScrawlError::FailedToCopyToTempFile(path)
@@ -194,7 +202,7 @@ impl Editor<ContentState> {
     /// Open a buffer seeded with the contents of a String in a text editor.
     pub fn open(&self) -> Result<String, ScrawlError> {
         /* Copy the contents of this file to the temp file */
-        let temp_file_path = create_temp_file()?;
+        let temp_file_path = create_temp_file(&self.unique.extension)?;
         fs::write(&temp_file_path, &self.unique.contents)
             .map_err(|_| ScrawlError::FailedToCopyToTempFile("[String]".into()))?;
 
@@ -231,11 +239,11 @@ fn get_default_editor_name() -> String {
 }
 
 /* Creates a thread safe, process safe tempfile to use as a buffer */
-fn create_temp_file() -> Result<PathBuf, ScrawlError> {
+fn create_temp_file(extension: &str) -> Result<PathBuf, ScrawlError> {
     /* Generate unique path to a temporary file buffer */
     let process_id = std::process::id();
     let i = TEMP_FILE_COUNT.fetch_add(1, Ordering::SeqCst);
-    let temp_file = format!("{}_{}_{}", PREFIX, process_id, i);
+    let temp_file = format!("{}_{}_{}.{}", PREFIX, process_id, i, extension);
 
     /* Push the file to the OS's temp dir */
     let mut temp_dir = temp_dir();
